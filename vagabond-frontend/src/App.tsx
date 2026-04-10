@@ -4,16 +4,6 @@ import musashiColor from "./assets/vagabond_peace.jpg";
 import musashiDark from "./assets/vagabond_water.jpg";
 import "./App.css";
 
-const FAKE_RESPONSES = [
-  "Miyamoto Musashi war ein legendärer Schwertkämpfer des frühen 17. Jahrhunderts. Er wurde 1584 in der Provinz Harima geboren und ist bekannt für seine Zwei-Schwerter-Technik, dem *Niten Ichi-ryū* Stil.",
-  "Im Vagabond-Manga von Takehiko Inoue begleiten wir Musashi auf seinem Weg zur Erleuchtung – nicht nur als Kämpfer, sondern als Mensch. Seine Rivalität mit Sasaki Kojirō ist dabei von zentraler Bedeutung.",
-  "Das Buch der Fünf Ringe (*Go Rin No Sho*) wurde von Musashi kurz vor seinem Tod im Jahr 1645 verfasst. Es ist eine Abhandlung über Strategie, Taktik und Philosophie.",
-  "Sasaki Kojirō, auch bekannt als 'der Dämon des westlichen Landes', war Musashis größter Rivale. Im Manga wird er als gehörloser Genius dargestellt – eine künstlerische Freiheit Inoues.",
-  "Die Yoshioka-Schule war eine der renommiertesten Schwertkampfschulen Kyotos. Musashi besiegte ihre Meister nacheinander – ein Ereignis, das ihn zur Legende machte.",
-];
-
-let fakeIndex = 0;
-
 interface TypingMessageProps {
   text: string;
   onDone?: () => void;
@@ -23,6 +13,7 @@ interface Message {
   role: "bot" | "user";
   text: string;
   typing?: boolean;
+  sources?: string[];
 }
 
 function TypingMessage({ text, onDone }: TypingMessageProps) {
@@ -84,12 +75,33 @@ export default function App() {
     setInput("");
     setMessages(prev => [...prev, { role: "user", text: userMsg }]);
     setLoading(true);
-    await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
-    const botText = FAKE_RESPONSES[fakeIndex % FAKE_RESPONSES.length];
-    fakeIndex++;
-    setLoading(false);
-    setTyping(true);
-    setMessages(prev => [...prev, { role: "bot", text: botText, typing: true }]);
+
+    try {
+      const res = await fetch("http://localhost:8000/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userMsg }),
+      });
+
+      if (!res.ok) throw new Error("Backend Fehler");
+      const data = await res.json();
+
+      setLoading(false);
+      setTyping(true);
+      setMessages(prev => [...prev, {
+        role: "bot",
+        text: data.answer,
+        sources: data.sources,
+        typing: true,
+      }]);
+    } catch {
+      setLoading(false);
+      setMessages(prev => [...prev, {
+        role: "bot",
+        text: "Fehler beim Verbinden mit dem Backend. Läuft der Server?",
+        typing: false,
+      }]);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -161,8 +173,8 @@ export default function App() {
                   {msg.typing
                     ? <TypingMessage text={msg.text} onDone={handleTypingDone} />
                     : msg.text}
-                  {msg.role === "bot" && !msg.typing && (
-                    <div className="source-tag">📜 Vagabond Wissen</div>
+                  {msg.role === "bot" && !msg.typing && msg.sources && msg.sources.length > 0 && (
+                    <div className="source-tag">📜 {msg.sources.join(" · ")}</div>
                   )}
                 </div>
                 {msg.role === "user" && <div className="avatar user-avatar">問</div>}
